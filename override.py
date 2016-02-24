@@ -156,22 +156,13 @@ def main():
     RECIPE_OVERRIDE_DIRS = autopkg_prefs["RECIPE_OVERRIDE_DIRS"]
     MUNKI_REPO = autopkg_prefs.get("MUNKI_REPO")
 
-    # repo_data = build_pkginfo_cache(MUNKI_REPO)
     production_cat = FoundationPlist.readPlist(
         os.path.join(MUNKI_REPO, "catalogs/production"))
 
     if args.pkginfo:
-        pkginfo_template = FoundationPlist.readPlist(
-            os.path.expanduser(args.pkginfo)).get("pkginfo")
-        if not pkginfo_template:
-            print "Pkginfo template format incorrect!. Quitting."
-            sys.exit(1)
+        pkginfo_template = get_pkginfo_template(args.pkginfo)
 
-    autopkgr_path = os.path.expanduser(
-        "~/Library/Application Support/AutoPkgr/recipe_list.txt")
-    recipe_list_path = args.recipe_list if args.recipe_list else autopkgr_path
-    with open(recipe_list_path) as recipe_list:
-        recipes = [recipe.strip() for recipe in recipe_list]
+    recipes = get_recipes(args.recipe_list)
 
     # TODO: Only does two recipes for testing.
     for recipe in recipes[:2]:
@@ -269,6 +260,27 @@ def get_argument_parser():
                 "'pkginfo'. ")
     parser.add_argument("-p", "--pkginfo", help=arg_help)
     return parser
+
+
+def get_pkginfo_template(pkginfo_template_path):
+    """Return the pkginfo top-level key from a plist file."""
+    pkginfo_template = FoundationPlist.readPlist(
+        os.path.expanduser(pkginfo_template_path)).get("pkginfo")
+    if not pkginfo_template:
+        sys.exit("Pkginfo template format incorrect!. Quitting.")
+    return pkginfo_template
+
+
+def get_recipes(recipe_list_path):
+    """Return a list of recipes read from a recipe list."""
+    autopkgr_path = os.path.expanduser(
+        "~/Library/Application Support/AutoPkgr/recipe_list.txt")
+    recipe_list_path = recipe_list_path if recipe_list_path else autopkgr_path
+    if not os.path.exists(recipe_list_path):
+        sys.exit("recipe_list file %s does not exist!" % recipe_list_path)
+    with open(recipe_list_path) as recipe_list:
+        recipes = [recipe.strip() for recipe in recipe_list]
+    return recipes
 
 
 def get_current_production_version(production_cat, override):
