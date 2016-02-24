@@ -21,6 +21,7 @@ recipe_list, and prompt for supplied values.
 
 
 import argparse
+from distutils.version import LooseVersion
 import fcntl
 import os
 import select
@@ -31,8 +32,8 @@ import sys
 import FoundationPlist
 
 
+PKGINFO_EXTENSIONS = (".pkginfo", ".plist")
 SEPARATOR = 20 * "-"
-
 
 
 def main():
@@ -42,6 +43,10 @@ def main():
         os.path.expanduser("~/Library/Preferences/com.github.autopkg.plist"))
     RECIPE_OVERRIDE_DIRS = autopkg_prefs["RECIPE_OVERRIDE_DIRS"]
     MUNKI_REPO = autopkg_prefs.get("MUNKI_REPO")
+
+    # repo_data = build_pkginfo_cache(MUNKI_REPO)
+    production_cat = FoundationPlist.readPlist(
+        os.path.join(MUNKI_REPO, "catalogs/production"))
 
     if args.pkginfo:
         pkginfo_template = FoundationPlist.readPlist(
@@ -57,7 +62,8 @@ def main():
         print "Making override for %s" % recipe
         command = ["/usr/local/bin/autopkg", "make-override", recipe]
         if args.override_dir:
-            command.insert(2, "--override-dir=%s" % args.override_dir)
+            command.insert(2, "--override-dir=%s" %
+                           os.path.realpath(args.override_dir))
         # autopkg will offer to search for missing recipes, and wait for
         # input. Therefore, we use a short timeout to just skip any
         # recipes that are (probably) hung up on the prompt.
@@ -76,24 +82,32 @@ def main():
             print SEPARATOR
             continue
 
-        override = output[output.find("/"):].strip()
+        override_path = output[output.find("/"):].strip()
 
         # Rename just-generated override's Input section to Input_Old, unless
         # preserve argument used (and then just copy?).
         # preserve argument is low priority.
+        override = FoundationPlist.readPlist(override_path)
+        override["Input_Original"] = override["Input"]
+        override["Input"] = {}
 
         # Get most current production version.
+        current_version = get_current_production_version(
+            production_cat, override)
+        print "\tUsing metadata values from {} version {}.".format(
+            current_version["name"], current_version["version"])
 
         # Get important metadata from most current production version
-        # This is what the -k field should be for.
-        # Defaults to:
-        # category
-        # description
-        # developer
-        # display_name
-        # Missing values fall back to "old" input values.
-
-        # Set metadata on "new" input section.
+        # falling back to override's original values.
+        keys = ("category", "description", "developer", "display_name",
+                "MUNKI_REPO_SUBDIR")
+        for key in keys:
+            current_val = current_version.get(key)
+            if current_val:
+                override["Input"][key] = current_val
+            else:
+                override["Input"][key] = override[
+                    "Input_Original"].get(key, "")
 
         # Enforce pkginfo template on new input section.
 
@@ -105,9 +119,9 @@ def main():
         #         if pkginfo_template.get(key) is None:
         #             override_data["Input"]["pkginfo"][key] = (
         #                 override_data["Input"]["pkginfo_old"][key])
-        #     print FoundationPlist.writePlistToString(override_data)
 
         # Write override.
+        print FoundationPlist.writePlistToString(override)
 
 
 def get_argument_parser():
@@ -139,7 +153,6 @@ def get_override_name(identifier):
     pass
 
 
-# TODO: This needs to mount the repo if it isn't already.
 def build_pkginfo_cache(repo):
     """Build a dictionary of pkgsinfo.
 
@@ -186,6 +199,24 @@ def build_pkginfo_cache_with_errors(repo):
             pkginfos[path] = pkginfo_file
 
     return (pkginfos, errors)
+
+
+def is_pkginfo(candidate):
+    return os.path.splitext(candidate)[-1].lower() in PKGINFO_EXTENSIONS
+
+
+def get_current_production_version(production_cat, override):
+    input_name = override["Input_Original"].get("NAME")
+    if not input_name:
+        pkginfo = override["Input_Original"].get("pkginfo")
+        if pkginfo:
+            input_name = pkginfo.get("name")
+        # If we haven't found a name yet, we can't look up the product.
+        if not input_name:
+            return {}
+
+    pkginfos = [item for item in production_cat if item["name"] == input_name]
+    return max(pkginfos, key=lambda x: LooseVersion(x["version"]))
 
 
 class Error(Exception):
@@ -305,6 +336,7 @@ class Popen(subprocess.Popen):
             stderr = None
 
         return (stdout, stderr)
+
 
 if __name__ == "__main__":
     main()
