@@ -153,55 +153,32 @@ def main():
     args = get_argument_parser().parse_args()
     autopkg_prefs = FoundationPlist.readPlist(
         os.path.expanduser("~/Library/Preferences/com.github.autopkg.plist"))
-    RECIPE_OVERRIDE_DIRS = autopkg_prefs["RECIPE_OVERRIDE_DIRS"]
     MUNKI_REPO = autopkg_prefs.get("MUNKI_REPO")
-
     production_cat = FoundationPlist.readPlist(
         os.path.join(MUNKI_REPO, "catalogs/production"))
-
-    if args.pkginfo:
-        pkginfo_template = get_pkginfo_template(args.pkginfo)
+    pkginfo_template = (get_pkginfo_template(args.pkginfo) if args.pkginfo else
+                        {})
 
     recipes = get_recipes(args.recipe_list)
+    process_overrides(recipes, args, production_cat, pkginfo_template)
 
+
+def process_overrides(recipes, args, production_cat, pkginfo_template):
     # TODO: Only does two recipes for testing.
     for recipe in recipes[:2]:
-        print "Making override for %s" % recipe
-        command = ["/usr/local/bin/autopkg", "make-override", recipe]
-        if args.override_dir:
-            command.insert(2, "--override-dir=%s" %
-                           os.path.realpath(args.override_dir))
-        # autopkg will offer to search for missing recipes, and wait for
-        # input. Therefore, we use a short timeout to just skip any
-        # recipes that are (probably) hung up on the prompt.
-        proc = Popen(command, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
-                     stderr=subprocess.PIPE)
-        try:
-            output, error = proc.communicate(timeout=3)
-        except TimeoutError:
-            print "\tPlease ensure you have the recipe file for %s." % recipe
-            print SEPARATOR
+        override_path = make_override(recipe, args.override_dir)
+        if override_path is None:
             continue
 
-        failure_string = "An override plist already exists at"
-        if failure_string in error:
-            print "\t" + error.strip()
-            print SEPARATOR
-            continue
-
-        override_path = output[output.find("/"):].strip()
-
-        # Rename just-generated override's Input section to Input_Old, unless
-        # preserve argument used (and then just copy?).
-        # preserve argument is low priority.
+        # Copy just-generated override's Input section to Input_Original.
         override = FoundationPlist.readPlist(override_path)
         override["Input_Original"] = override["Input"]
         override["Input"] = {}
 
-        # Get most current production version.
         current_version = get_current_production_version(
             production_cat, override)
         if current_version:
+            # TODO: Refactor
             print "\tUsing metadata values from {} version {}.".format(
                 current_version["name"], current_version["version"])
             # Get important metadata from most current production version
@@ -281,6 +258,43 @@ def get_recipes(recipe_list_path):
     with open(recipe_list_path) as recipe_list:
         recipes = [recipe.strip() for recipe in recipe_list]
     return recipes
+
+
+def make_override(recipe, override_dir):
+    """Make an override and return its path.
+
+    Args:
+        recipe (str): Recipe name.
+        override_dir (str): Path in which to create overrides.
+
+    Returns:
+        str path to new override, or None for errors or pre-existing
+        overrides.
+    """
+    print "Making override for %s" % recipe
+    command = ["/usr/local/bin/autopkg", "make-override", recipe]
+    if override_dir:
+        command.insert(2, "--override-dir=%s" %
+                        os.path.realpath(override_dir))
+    # autopkg will offer to search for missing recipes, and wait for
+    # input. Therefore, we use a short timeout to just skip any
+    # recipes that are (probably) hung up on the prompt.
+    proc = Popen(command, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE)
+    try:
+        output, error = proc.communicate(timeout=3)
+    except TimeoutError:
+        print "\tPlease ensure you have the recipe file for %s." % recipe
+        print SEPARATOR
+        return None
+
+    failure_string = "An override plist already exists at"
+    if failure_string in error:
+        print "\t" + error.strip()
+        print SEPARATOR
+        return None
+
+    return output[output.find("/"):].strip()
 
 
 def get_current_production_version(production_cat, override):
