@@ -36,6 +36,7 @@ import sys
 import FoundationPlist
 
 
+ENDC = "\033[0m"
 METADATA = ("category", "description", "developer", "display_name",
             "MUNKI_REPO_SUBDIR")
 PKGINFO_EXTENSIONS = (".pkginfo", ".plist")
@@ -160,7 +161,12 @@ def main():
                         {})
 
     recipes = get_recipes(args.recipe_list)
-    process_overrides(recipes, args, production_cat, pkginfo_template)
+    try:
+        process_overrides(recipes, args, production_cat, pkginfo_template)
+    except KeyboardInterrupt:
+        print_error("Bailing!")
+    finally:
+        reset_term_colors()
 
 
 def process_overrides(recipes, args, production_cat, pkginfo_template):
@@ -172,6 +178,7 @@ def process_overrides(recipes, args, production_cat, pkginfo_template):
         pkginfo_template (Plist): Template pkginfo settings to apply.
     """
     for recipe in recipes:
+        print SEPARATOR
         override_path = make_override(recipe, args.override_dir)
         if override_path is None:
             continue
@@ -186,8 +193,8 @@ def process_overrides(recipes, args, production_cat, pkginfo_template):
         if current_version:
             apply_current_or_orig_values(override, current_version, args.keys)
         else:
-            print ("\tUnable to determine product 'name'. Skipping copying "
-                   "current production metadata!")
+            print_error("\tUnable to determine product 'name'. Skipping "
+                        "copying current production metadata!")
 
         if pkginfo_template:
             apply_pkginfo_template(override, pkginfo_template)
@@ -272,14 +279,13 @@ def make_override(recipe, override_dir):
     try:
         output, error = proc.communicate(timeout=3)
     except TimeoutError:
-        print "\tPlease ensure you have the recipe file for %s." % recipe
-        print SEPARATOR
+        print_error(
+            "\tPlease ensure you have the recipe file for %s." % recipe)
         return None
 
     failure_string = "An override plist already exists at"
     if failure_string in error:
-        print "\t" + error.strip()
-        print SEPARATOR
+        print_error("\t" + error.strip())
         return None
 
     return output[output.find("/"):].strip()
@@ -296,7 +302,8 @@ def get_current_production_version(production_cat, override):
             return {}
 
     pkginfos = [item for item in production_cat if item["name"] == input_name]
-    return max(pkginfos, key=lambda x: LooseVersion(x["version"]))
+    return (max(pkginfos, key=lambda x: LooseVersion(x["version"])) if pkginfos
+            else {})
 
 
 def apply_current_or_orig_values(override, current_version, keys):
@@ -327,6 +334,7 @@ def apply_pkginfo_template(override, pkginfo_template):
     for key, val in orig_pkginfo.items():
         if key not in pkginfo or pkginfo[key] is None:
             pkginfo[key] = orig_pkginfo[key]
+    print "\tApplied pkginfo template."
 
 
 def set_file_nonblock(f, non_blocking=True):
@@ -340,6 +348,15 @@ def set_file_nonblock(f, non_blocking=True):
     if bool(flags & os.O_NONBLOCK) != non_blocking:
         flags ^= os.O_NONBLOCK
     fcntl.fcntl(f.fileno(), fcntl.F_SETFL, flags)
+
+
+def print_error(message):
+    print >> sys.stderr, "\033[1;38;5;196m" + message
+    print ENDC,
+
+def reset_term_colors():
+    """Ensure terminal colors are normal."""
+    sys.stdout.write(ENDC)
 
 
 if __name__ == "__main__":
