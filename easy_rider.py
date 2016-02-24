@@ -39,8 +39,7 @@ import FoundationPlist
 
 
 ENDC = "\033[0m"
-METADATA = ("category", "description", "developer", "display_name",
-            "MUNKI_REPO_SUBDIR")
+METADATA = ("category", "description", "developer", "display_name")
 PKGINFO_EXTENSIONS = (".pkginfo", ".plist")
 SEPARATOR = 20 * "-"
 
@@ -189,6 +188,7 @@ def process_overrides(recipes, args, production_cat, pkginfo_template):
         override = FoundationPlist.readPlist(override_path)
         override["Input_Original"] = override["Input"]
         override["Input"] = {}
+        override["Input"]["pkginfo"] = {}
 
         current_version = get_current_production_version(
             production_cat, override)
@@ -327,21 +327,21 @@ def apply_current_or_orig_values(override, current_version, keys):
     for key in keys:
         current_val = current_version.get(key)
         if current_val:
-            override["Input"][key] = current_val
+            override["Input"]["pkginfo"][key] = current_val
         else:
-            override["Input"][key] = override[
-                "Input_Original"].get(key, "")
+            override["Input"]["pkginfo"][key] = override[
+                "Input_Original"].get("pkginfo", {}).get(key, "")
 
 
 def apply_pkginfo_template(override, pkginfo_template):
     """Force values from pkginfo_template on override's pkginfo."""
     # Need to "convert" Objc object to dict.
-    override["Input"]["pkginfo"] = dict(pkginfo_template)
-    pkginfo = override["Input"]["pkginfo"]
-    orig_pkginfo  = override["Input_Original"].get("pkginfo", {})
-    for key, val in orig_pkginfo.items():
-        if key not in pkginfo or pkginfo[key] is None:
-            pkginfo[key] = orig_pkginfo[key]
+    override["Input"]["pkginfo"].update(dict(pkginfo_template))
+    # pkginfo = override["Input"]["pkginfo"]
+    # orig_pkginfo  = override["Input_Original"].get("pkginfo", {})
+    # for key, val in orig_pkginfo.items():
+    #     if key not in pkginfo or pkginfo[key] is None:
+    #         pkginfo[key] = orig_pkginfo[key]
     print "\tApplied pkginfo template."
 
 

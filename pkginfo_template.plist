@@ -8,16 +8,6 @@
         <array>
             <string>testing</string>
         </array>
-        <key>category</key>
-        <string>AutoPkg</string>
-        <key>description</key>
-        <string></string>
-        <key>developer</key>
-        <string></string>
-        <key>display_name</key>
-        <string></string>
-        <key>name</key>
-        <string>%NAME%</string>
         <key>unattended_install</key>
         <false/>
     </dict>
