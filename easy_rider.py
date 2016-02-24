@@ -17,13 +17,13 @@
 
 """easy_rider
 
-Create an override for each recipe listed in an Autopkg recipe-list.
-(Defaults to current user's AutoPkgr recipe_list). The 'Input' will be
-renamed to 'Input_Original', and a new 'Input' section will be populated
-with metadata from the most current production version of that product,
-followed by metadata from the 'Input_Original' for any blank values.
-Finally, (optionally with -p/--pkginfo), a plist of values is added to
-the 'Input' 'pkginfo' key.
+Create an override for each recipe listed in an Autopkg recipe-list. or a
+supplied list of recipe identifiers. (Defaults to current user's AutoPkgr
+recipe_list) . The 'Input' will be renamed to 'Input_Original', and a new
+'Input' section will be populated with metadata from the most current
+production version of that product, followed by metadata from the
+'Input_Original' for any blank values. Finally, (optionally with
+-p/--pkginfo), a plist of values is added to the 'Input' 'pkginfo' key.
 """
 
 
@@ -162,7 +162,7 @@ def main():
     pkginfo_template = (get_pkginfo_template(args.pkginfo) if args.pkginfo else
                         {})
 
-    recipes = get_recipes(args.recipe_list)
+    recipes = args.recipes if args.recipes else get_recipes(args.recipe_list)
     try:
         process_overrides(recipes, args, production_cat, pkginfo_template)
     except KeyboardInterrupt:
@@ -208,22 +208,28 @@ def get_argument_parser():
     """Create our argument parser."""
     description = (
         "Create an override for each recipe listed in an Autopkg recipe-list. "
-        "(Defaults to current user's AutoPkgr recipe_list). The 'Input' will "
-        "be renamed to 'Input_Original', and a new 'Input' section will be "
-        "populated with metadata from the most current production version of "
-        "that product, followed by metadata from the 'Input_Original' for any "
-        "blank values. Finally, (optionally with -p/--pkginfo), a plist of "
-        "values is added to the 'Input' 'pkginfo' key.")
+        "or a supplied list of recipe identifiers. (Defaults to current "
+        "user's AutoPkgr recipe_list) . The 'Input' will be renamed to "
+        "'Input_Original', and a new 'Input' section will be populated with "
+        "metadata from the most current production version of that product, "
+        "followed by metadata from the 'Input_Original' for any blank values. "
+        "Finally, (optionally with -p/--pkginfo), a plist of values is added "
+        "to the 'Input' 'pkginfo' key.")
     epilog = ("Please see the README for use examples and further "
               "description.")
     parser = argparse.ArgumentParser(description=description, epilog=epilog)
     arg_help = ("Path to a location other than your autopkg override-dir "
                 "to save overrides.")
     parser.add_argument("-o", "--override-dir", help=arg_help)
+
+    group = parser.add_mutually_exclusive_group()
     arg_help = ("Path to a recipe list. If not specified, defaults to use "
                 "AutoPkgr's recipe_list at "
                 "~/Library/Application Support/AutoPkgr.")
-    parser.add_argument("-l", "--recipe-list", help=arg_help)
+    group.add_argument("-l", "--recipe-list", help=arg_help)
+    arg_help = "One or more recipe identifiers for which to create overrides."
+    group.add_argument("-r", "--recipes", help=arg_help, nargs="+")
+
     arg_help = ("Input metadata key names (may specify multiple values) to "
                 "copy from newest production version to 'Input'. Defaults to: "
                 "%(default)s")
