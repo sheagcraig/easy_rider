@@ -149,7 +149,7 @@ class Popen(subprocess.Popen):
 
 
 def main():
-    """Handle arguments and execute commands."""
+    """Set up arguments and start processing."""
     args = get_argument_parser().parse_args()
     autopkg_prefs = FoundationPlist.readPlist(
         os.path.expanduser("~/Library/Preferences/com.github.autopkg.plist"))
@@ -164,8 +164,14 @@ def main():
 
 
 def process_overrides(recipes, args, production_cat, pkginfo_template):
-    # TODO: Only does two recipes for testing.
-    for recipe in recipes[:2]:
+    """Start main processing loop.
+
+    Args:
+        recipes (list of str): Recipe names/ids to override.
+        production_cat (Plist): Munki's 'production' catalog.
+        pkginfo_template (Plist): Template pkginfo settings to apply.
+    """
+    for recipe in recipes:
         override_path = make_override(recipe, args.override_dir)
         if override_path is None:
             continue
@@ -178,32 +184,14 @@ def process_overrides(recipes, args, production_cat, pkginfo_template):
         current_version = get_current_production_version(
             production_cat, override)
         if current_version:
-            # TODO: Refactor
-            print "\tUsing metadata values from {} version {}.".format(
-                current_version["name"], current_version["version"])
-            # Get important metadata from most current production version
-            # falling back to override's original values.
-            for key in args.keys:
-                current_val = current_version.get(key)
-                if current_val:
-                    override["Input"][key] = current_val
-                else:
-                    override["Input"][key] = override[
-                        "Input_Original"].get(key, "")
+            apply_current_or_orig_values(override, current_version, args.keys)
         else:
             print ("\tUnable to determine product 'name'. Skipping copying "
                    "current production metadata!")
 
-        # Enforce pkginfo template on new input section.
-        if args.pkginfo:
-            override["Input"]["pkginfo"] = dict(pkginfo_template)
-            pkginfo = override["Input"]["pkginfo"]
-            orig_pkginfo  = override["Input_Original"].get("pkginfo", {})
-            for key, val in orig_pkginfo.items():
-                if key not in pkginfo or pkginfo[key] is None:
-                    pkginfo[key] = orig_pkginfo[key]
+        if pkginfo_template:
+            apply_pkginfo_template(override, pkginfo_template)
 
-        # Write override.
         FoundationPlist.writePlist(override, override_path)
 
 
@@ -309,6 +297,36 @@ def get_current_production_version(production_cat, override):
 
     pkginfos = [item for item in production_cat if item["name"] == input_name]
     return max(pkginfos, key=lambda x: LooseVersion(x["version"]))
+
+
+def apply_current_or_orig_values(override, current_version, keys):
+    """Get important metadata from current or original recipe.
+
+    Args:
+        override (Plist): Override plist object.
+        current_version (dict): Munki pkginfo dict.
+        keys (tuple/list): Metadata keys to consider.
+    """
+    print "\tUsing metadata values from {} version {}.".format(
+        current_version["name"], current_version["version"])
+    for key in keys:
+        current_val = current_version.get(key)
+        if current_val:
+            override["Input"][key] = current_val
+        else:
+            override["Input"][key] = override[
+                "Input_Original"].get(key, "")
+
+
+def apply_pkginfo_template(override, pkginfo_template):
+    """Force values from pkginfo_template on override's pkginfo."""
+    # Need to "convert" Objc object to dict.
+    override["Input"]["pkginfo"] = dict(pkginfo_template)
+    pkginfo = override["Input"]["pkginfo"]
+    orig_pkginfo  = override["Input_Original"].get("pkginfo", {})
+    for key, val in orig_pkginfo.items():
+        if key not in pkginfo or pkginfo[key] is None:
+            pkginfo[key] = orig_pkginfo[key]
 
 
 def set_file_nonblock(f, non_blocking=True):
