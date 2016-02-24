@@ -32,6 +32,8 @@ import sys
 import FoundationPlist
 
 
+METADATA = ("category", "description", "developer", "display_name",
+            "MUNKI_REPO_SUBDIR")
 PKGINFO_EXTENSIONS = (".pkginfo", ".plist")
 SEPARATOR = 20 * "-"
 
@@ -50,10 +52,14 @@ def main():
 
     if args.pkginfo:
         pkginfo_template = FoundationPlist.readPlist(
-            os.path.expanduser(args.pkginfo))["pkginfo"]
+            os.path.expanduser(args.pkginfo)).get("pkginfo")
+        if not pkginfo_template:
+            print "Pkginfo template format incorrect!. Quitting."
+            sys.exit(1)
 
-    recipe_list_path = os.path.expanduser(
+    autopkgr_path = os.path.expanduser(
         "~/Library/Application Support/AutoPkgr/recipe_list.txt")
+    recipe_list_path = args.recipe_list if args.recipe_list else autopkgr_path
     with open(recipe_list_path) as recipe_list:
         recipes = [recipe.strip() for recipe in recipe_list]
 
@@ -99,9 +105,7 @@ def main():
 
         # Get important metadata from most current production version
         # falling back to override's original values.
-        keys = ("category", "description", "developer", "display_name",
-                "MUNKI_REPO_SUBDIR")
-        for key in keys:
+        for key in args.keys:
             current_val = current_version.get(key)
             if current_val:
                 override["Input"][key] = current_val
@@ -110,15 +114,13 @@ def main():
                     "Input_Original"].get(key, "")
 
         # Enforce pkginfo template on new input section.
-
-        # if pkginfo_template:
-        #     override_data = FoundationPlist.readPlist(override)
-        #     override_data["Input"]["pkginfo_old"] = override_data["Input"].get("pkginfo", {})
-        #     override_data["Input"]["pkginfo"] = dict(pkginfo_template)
-        #     for key in override_data["Input"]["pkginfo_old"]:
-        #         if pkginfo_template.get(key) is None:
-        #             override_data["Input"]["pkginfo"][key] = (
-        #                 override_data["Input"]["pkginfo_old"][key])
+        if args.pkginfo:
+            override["Input"]["pkginfo"] = dict(pkginfo_template)
+            pkginfo = override["Input"]["pkginfo"]
+            orig_pkginfo  = override["Input_Original"].get("pkginfo", {})
+            for key, val in orig_pkginfo.items():
+                if key not in pkginfo or pkginfo[key] is None:
+                    pkginfo[key] = orig_pkginfo[key]
 
         # Write override.
         print FoundationPlist.writePlistToString(override)
@@ -126,20 +128,33 @@ def main():
 
 def get_argument_parser():
     """Create our argument parser."""
-    description = ("Create an override for each recipe listed in current "
-                   "user's AutoPkgr recipe_list. Optionally, prompt for "
-                   "values for keys specified with the keys option.")
-    parser = argparse.ArgumentParser(description=description)
-    arg_help = ("Path to a munki pkginfo plist to include in each override. "
-                "Existing pkginfo value will be renamed to "
-                "'pkginfo-original'.")
-    parser.add_argument("-p", "--pkginfo", help=arg_help)
+    description = (
+        "Create an override for each recipe listed in an Autopkg recipe-list. "
+        "(Defaults to current user's AutoPkgr recipe_list). The 'Input' will "
+        "be renamed to 'Input_Original', and a new 'Input' section will be "
+        "populated with metadata from the most current production version of "
+        "that product, followed by metadata from the 'Input_Original' for any "
+        "blank values. Finally, (optionally with -p/--pkginfo), a plist of "
+        "values is added to the 'Input' 'pkginfo' key.")
+    epilog = ("Please see the README for use examples and further "
+              "description.")
+    parser = argparse.ArgumentParser(description=description, epilog=epilog)
     arg_help = ("Path to a location other than your autopkg override-dir "
                 "to save overrides.")
     parser.add_argument("-o", "--override-dir", help=arg_help)
-
-    # arg_help = "List of INPUT keys to prompt for override values."
-    # parser.add_argument("-k", "--keys", help=arg_help)
+    arg_help = ("Path to a recipe list. If not specified, defaults to use "
+                "AutoPkgr's recipe_list at "
+                "~/Library/Application Support/AutoPkgr.")
+    parser.add_argument("-l", "--recipe-list", help=arg_help)
+    arg_help = ("Input metadata key names (may specify multiple values) to "
+                "copy from newest production version to 'Input'. Defaults to: "
+                "%(default)s")
+    parser.add_argument("-k", "--keys", help=arg_help, nargs="+",
+                        default=METADATA)
+    arg_help = ("Path to a plist file defining override values to enforce. "
+                "This plist should have a top-level dict element named "
+                "'pkginfo'. ")
+    parser.add_argument("-p", "--pkginfo", help=arg_help)
     # arg_help = ("Drop any keys not specified in the '-k/--keys' argument. "
     #             "This can help prevent overrides from freezing changes to the "
     #             "parent recipe.")
