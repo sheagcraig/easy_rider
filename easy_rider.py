@@ -15,7 +15,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Create an override for each recipe listed in an Autopkg recipe-list.
+"""easy_rider
+
+Create an override for each recipe listed in an Autopkg recipe-list.
 (Defaults to current user's AutoPkgr recipe_list). The 'Input' will be
 renamed to 'Input_Original', and a new 'Input' section will be populated
 with metadata from the most current production version of that product,
