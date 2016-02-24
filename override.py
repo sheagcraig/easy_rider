@@ -40,7 +40,7 @@ def main():
     args = get_argument_parser().parse_args()
     autopkg_prefs = FoundationPlist.readPlist(
         os.path.expanduser("~/Library/Preferences/com.github.autopkg.plist"))
-    RECIPE_OVERRIDE_DIRS = autopkg_prefs.get("RECIPE_OVERRIDE_DIRS")
+    RECIPE_OVERRIDE_DIRS = autopkg_prefs["RECIPE_OVERRIDE_DIRS"]
     MUNKI_REPO = autopkg_prefs.get("MUNKI_REPO")
 
     if args.pkginfo:
@@ -55,15 +55,18 @@ def main():
     # TODO: Only does two recipes for testing.
     for recipe in recipes[:2]:
         print "Making override for %s" % recipe
-        # TODO: Make overrides in a custom directory argument.
         command = ["/usr/local/bin/autopkg", "make-override", recipe]
-        # result = Popen(command)
+        if args.override_dir:
+            command.insert(2, "--override-dir=%s" % args.override_dir)
+        # autopkg will offer to search for missing recipes, and wait for
+        # input. Therefore, we use a short timeout to just skip any
+        # recipes that are (probably) hung up on the prompt.
         proc = Popen(command, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
                      stderr=subprocess.PIPE)
         try:
             output, error = proc.communicate(timeout=3)
         except TimeoutError:
-            print "\t" + "Please ensure you have the recipe file for %s." % recipe
+            print "\tPlease ensure you have the recipe file for %s." % recipe
             print SEPARATOR
             continue
 
@@ -72,6 +75,7 @@ def main():
             print "\t" + error.strip()
             print SEPARATOR
             continue
+
         override = output[output.find("/"):].strip()
 
         # Rename just-generated override's Input section to Input_Old, unless
@@ -116,6 +120,9 @@ def get_argument_parser():
                 "Existing pkginfo value will be renamed to "
                 "'pkginfo-original'.")
     parser.add_argument("-p", "--pkginfo", help=arg_help)
+    arg_help = ("Path to a location other than your autopkg override-dir "
+                "to save overrides.")
+    parser.add_argument("-o", "--override-dir", help=arg_help)
 
     # arg_help = "List of INPUT keys to prompt for override values."
     # parser.add_argument("-k", "--keys", help=arg_help)
@@ -128,7 +135,7 @@ def get_argument_parser():
 
 
 def get_override_name(identifier):
-    """Use autopkg info to get determine the filename for the override."""
+    """Use autopkg info to determine the filename for the override."""
     pass
 
 
