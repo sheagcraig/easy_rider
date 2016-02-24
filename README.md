@@ -30,3 +30,5 @@ optional arguments:
                         enforce. This plist should have a top-level dict
                         element named 'pkginfo'.
 ```
+
+More information forthcoming.
