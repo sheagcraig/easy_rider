@@ -202,12 +202,8 @@ def process_overrides(recipes, args, production_cat, pkginfo_template):
         override["Input"]["pkginfo"] = {}
 
         current_version = get_current_production_version(
-            production_cat, override)
-        if current_version:
-            apply_current_or_orig_values(override, current_version, args.keys)
-        else:
-            print_error("\tUnable to determine product 'name'. Skipping "
-                        "copying current production metadata!")
+            production_cat, override, args)
+        apply_current_or_orig_values(override, current_version, args)
 
         if pkginfo_template:
             apply_pkginfo_template(override, pkginfo_template)
@@ -253,6 +249,20 @@ def get_argument_parser():
     arg_help = ("Name of Munki catalog from which to search current pkginfo "
                 "values. (Defaults to '%(default)s)'")
     parser.add_argument("-c", "--catalog", help=arg_help, default="production")
+    arg_help = ("Skip copying subdirectory information from existing items. "
+                " Most Munki recipes provide access to the MunkiImporter "
+                "`repo_subdirectory` argument in the Input section as "
+                "`MUNKI_REPO_SUBDIR`. By default, easy_rider will use the "
+                "directory found in the most recent production version of the "
+                "product to populate the Input value, unless the recipe "
+                "does not offer that override, or if you suppress that "
+                "behavior with this option.")
+    parser.add_argument("--suppress_subdir", help=arg_help,
+                        action="store_true")
+    arg_help = ("Do not interactively prompt for values. When no value exists "
+                "in the most recent production version of a product, this "
+                "option instructs easy_rider to just enter a blank string.")
+    parser.add_argument("--no_prompt", help=arg_help, action="store_true")
     return parser
 
 
@@ -313,38 +323,76 @@ def make_override(recipe, override_dir):
     return output[output.find("/"):].strip()
 
 
-def get_current_production_version(production_cat, override):
+def get_current_production_version(production_cat, override, args):
+    # current_version = None
+    name = get_name_from_override(override)
+    current_version = get_current_production_version_from_name(
+        name, production_cat)
+    if not current_version and not args.no_prompt:
+        print_error("\tUnable to determine product 'name'.")
+        while not current_version:
+            choice = raw_input("\tPlease enter a Munki name for the product, "
+                               "or hit enter to skip lookup: ")
+            if not choice:
+                return {}
+            current_version = get_current_production_version_from_name(
+                choice, production_cat)
+
+    return current_version
+
+
+def get_name_from_override(override):
     input_name = override["Input_Original"].get("NAME")
     if not input_name:
         pkginfo = override["Input_Original"].get("pkginfo")
         if pkginfo:
             input_name = pkginfo.get("name")
-        # If we haven't found a name yet, we can't look up the product.
-        if not input_name:
-            return {}
+    return input_name
 
+
+def get_current_production_version_from_name(input_name, production_cat):
     pkginfos = [item for item in production_cat if item["name"] == input_name]
     return (max(pkginfos, key=lambda x: LooseVersion(x["version"])) if pkginfos
             else {})
 
 
-def apply_current_or_orig_values(override, current_version, keys):
+def apply_current_or_orig_values(override, current_version, args):
     """Get important metadata from current or original recipe.
 
     Args:
         override (Plist): Override plist object.
         current_version (dict): Munki pkginfo dict.
-        keys (tuple/list): Metadata keys to consider.
+        args: ArgumentParser args with args:
+            no_prompt (bool): Whether to get interactive values.
+            keys (tuple/list): Metadata keys to consider.
     """
-    print "\tUsing metadata values from {} version {}.".format(
-        current_version["name"], current_version["version"])
+    keys = args.keys
+    if current_version:
+        print "\tUsing metadata values from {} version {}.".format(
+            current_version["name"], current_version["version"])
     for key in keys:
         current_val = current_version.get(key)
         if current_val:
             override["Input"]["pkginfo"][key] = current_val
         else:
-            override["Input"]["pkginfo"][key] = override[
-                "Input_Original"].get("pkginfo", {}).get(key, "")
+            default = override["Input_Original"].get(
+                "pkginfo", {}).get(key, "")
+            choice = ""
+            if not args.no_prompt:
+                print "\tNo current '%s' value found to apply." % key
+                print "\tRecipe specifies: '%s'" % default
+                choice = raw_input("\tHit enter to use the recipe value, or "
+                                   "enter a new value: ")
+            override["Input"]["pkginfo"][key] = (
+                default if choice == "" else choice)
+
+
+def copy_package_path_to_input(override, current_version):
+    pkg_path = "package_path"
+    munki_subdir = "MUNKI_REPO_SUBDIR"
+    if pkg_path in current_version and munki_subdir in override["Input"]:
+        override["Input"][munki_subdir] = os.path.dirname(
+            current_version[pkg_path])
 
 
 def apply_pkginfo_template(override, pkginfo_template):
