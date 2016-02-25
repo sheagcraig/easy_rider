@@ -43,6 +43,7 @@ METADATA = ("category", "description", "developer", "display_name")
 PKGINFO_EXTENSIONS = (".pkginfo", ".plist")
 RECIPE_EXCLUSIONS = ("com.github.autopkg.munki.makecatalogs",)
 SEPARATOR = 20 * "-"
+__version__ = "0.3.0"
 
 
 class Error(Exception):
