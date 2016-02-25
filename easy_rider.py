@@ -259,7 +259,9 @@ def get_recipes(recipe_list_path):
     if not os.path.exists(recipe_list_path):
         sys.exit("recipe_list file %s does not exist!" % recipe_list_path)
     with open(recipe_list_path) as recipe_list:
-        recipes = [recipe.strip() for recipe in recipe_list]
+        recipes = [recipe.strip() for recipe in recipe_list if
+                   recipe.strip() != "com.github.autopkg.munki.makecatalogs"
+                   and not recipe.strip().startswith("local")]
     return recipes
 
 
@@ -361,6 +363,7 @@ def set_file_nonblock(f, non_blocking=True):
 def print_error(message):
     print >> sys.stderr, "\033[1;38;5;196m" + message
     print ENDC,
+
 
 def reset_term_colors():
     """Ensure terminal colors are normal."""
