@@ -206,6 +206,8 @@ def process_overrides(recipes, args, production_cat, pkginfo_template):
             production_cat, override, args)
         apply_current_or_orig_values(override, current_version, args)
 
+        copy_package_path_to_input(override, current_version, args)
+
         if pkginfo_template:
             apply_pkginfo_template(override, pkginfo_template)
 
@@ -224,7 +226,7 @@ def get_argument_parser():
         "Finally, (optionally with -p/--pkginfo), a plist of values is added "
         "to the 'Input' 'pkginfo' key.")
     epilog = ("Please see the README for use examples and further "
-              "description.")
+              "description. Why don't you cut your hair?")
     parser = argparse.ArgumentParser(description=description, epilog=epilog)
     arg_help = ("Path to a location other than your autopkg override-dir "
                 "to save overrides.")
@@ -264,6 +266,12 @@ def get_argument_parser():
                 "in the most recent production version of a product, this "
                 "option instructs easy_rider to just enter a blank string.")
     parser.add_argument("--no_prompt", help=arg_help, action="store_true")
+    arg_help = ("Instead of using current production value for "
+                "repo_subdirectory, either prompt for input (no value) or "
+                "use the value of a pkginfo key (e.g. 'developer' or "
+                "'category').")
+    parser.add_argument("--specify_subdir", help=arg_help, nargs="?",
+                        default="", const="<PROMPT>")
     return parser
 
 
@@ -388,23 +396,32 @@ def apply_current_or_orig_values(override, current_version, args):
                 default if choice == "" else choice)
 
 
-def copy_package_path_to_input(override, current_version):
-    pkg_path = "package_path"
+def copy_package_path_to_input(override, current_version, args):
+    pkg_path = "installer_item_location"
     munki_subdir = "MUNKI_REPO_SUBDIR"
-    if pkg_path in current_version and munki_subdir in override["Input"]:
-        override["Input"][munki_subdir] = os.path.dirname(
-            current_version[pkg_path])
+    # Make sure we can even override the subdirectory.
+    # import pdb;pdb.set_trace()
+    if pkg_path in current_version and munki_subdir in override["Input_Original"]:
+        default = os.path.dirname(current_version[pkg_path])
+        if args.specify_subdir == "<PROMPT>":
+            choice = raw_input(
+                "Please enter a subdirectory to import pkginfo and pkg to "
+                "(Hit enter to accept default: '%s'): " % default)
+            subdirectory = default if not choice else choice
+        elif args.specify_subdir:
+            subdirectory = override["Input"]["pkginfo"].get(
+                args.specify_subdir, "")
+        else:
+            subdirectory = default
+
+        override["Input"][munki_subdir] = subdirectory
+        print "\tSet Munki repo subdirectory to '%s'" % subdirectory
 
 
 def apply_pkginfo_template(override, pkginfo_template):
     """Force values from pkginfo_template on override's pkginfo."""
     # Need to "convert" Objc object to dict.
     override["Input"]["pkginfo"].update(dict(pkginfo_template))
-    # pkginfo = override["Input"]["pkginfo"]
-    # orig_pkginfo  = override["Input_Original"].get("pkginfo", {})
-    # for key, val in orig_pkginfo.items():
-    #     if key not in pkginfo or pkginfo[key] is None:
-    #         pkginfo[key] = orig_pkginfo[key]
     print "\tApplied pkginfo template."
 
 
