@@ -402,11 +402,11 @@ def copy_package_path_to_input(override, current_version, args):
     # Make sure we can even override the subdirectory.
     # import pdb;pdb.set_trace()
     if pkg_path in current_version and munki_subdir in override["Input_Original"]:
-        default = os.path.dirname(current_version[pkg_path])
+        default = os.path.dirname(current_version.get(pkg_path))
         if args.specify_subdir == "<PROMPT>":
             choice = raw_input(
-                "Please enter a subdirectory to import pkginfo and pkg to "
-                "(Hit enter to accept default: '%s'): " % default)
+                "\tPlease enter a subdirectory to import pkginfo and pkg to "
+                "(Hit enter to accept default value '%s'): " % default)
             subdirectory = default if not choice else choice
         elif args.specify_subdir:
             subdirectory = override["Input"]["pkginfo"].get(
@@ -416,6 +416,8 @@ def copy_package_path_to_input(override, current_version, args):
 
         override["Input"][munki_subdir] = subdirectory
         print "\tSet Munki repo subdirectory to '%s'" % subdirectory
+    else:
+        print "\tCan't override %s" % munki_subdir
 
 
 def apply_pkginfo_template(override, pkginfo_template):
