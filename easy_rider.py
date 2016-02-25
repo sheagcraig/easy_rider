@@ -41,6 +41,7 @@ import FoundationPlist
 ENDC = "\033[0m"
 METADATA = ("category", "description", "developer", "display_name")
 PKGINFO_EXTENSIONS = (".pkginfo", ".plist")
+RECIPE_EXCLUSIONS = ("com.github.autopkg.munki.makecatalogs",)
 SEPARATOR = 20 * "-"
 
 
@@ -180,6 +181,16 @@ def process_overrides(recipes, args, production_cat, pkginfo_template):
     """
     for recipe in recipes:
         print SEPARATOR
+
+        if recipe in RECIPE_EXCLUSIONS:
+            print_error("Not overriding %s because it is in the list of "
+                        "exclusions." % recipe)
+            continue
+        if recipe.startswith("local"):
+            print_error("Not overriding %s because it _is_ an override." %
+                        recipe)
+            continue
+
         override_path = make_override(recipe, args.override_dir)
         if override_path is None:
             continue
@@ -262,9 +273,7 @@ def get_recipes(recipe_list_path):
     if not os.path.exists(recipe_list_path):
         sys.exit("recipe_list file %s does not exist!" % recipe_list_path)
     with open(recipe_list_path) as recipe_list:
-        recipes = [recipe.strip() for recipe in recipe_list if
-                   recipe.strip() != "com.github.autopkg.munki.makecatalogs"
-                   and not recipe.strip().startswith("local")]
+        recipes = [recipe.strip() for recipe in recipe_list]
     return recipes
 
 
