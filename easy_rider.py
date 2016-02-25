@@ -157,7 +157,7 @@ def main():
         os.path.expanduser("~/Library/Preferences/com.github.autopkg.plist"))
     MUNKI_REPO = autopkg_prefs.get("MUNKI_REPO")
     production_cat = FoundationPlist.readPlist(
-        os.path.join(MUNKI_REPO, "catalogs/production"))
+        os.path.join(MUNKI_REPO, "catalogs/%s" % args.catalog))
     pkginfo_template = (get_pkginfo_template(args.pkginfo) if args.pkginfo else
                         {})
 
@@ -239,6 +239,9 @@ def get_argument_parser():
                 "This plist should have a top-level dict element named "
                 "'pkginfo'. ")
     parser.add_argument("-p", "--pkginfo", help=arg_help)
+    arg_help = ("Name of Munki catalog from which to search current pkginfo "
+                "values. (Defaults to '%(default)s)'")
+    parser.add_argument("-c", "--catalog", help=arg_help, default="production")
     return parser
 
 
