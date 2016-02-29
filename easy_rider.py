@@ -206,7 +206,8 @@ def process_overrides(recipes, args, production_cat, pkginfo_template):
             production_cat, override, args)
         apply_current_or_orig_values(override, current_version, args)
 
-        copy_package_path_to_input(override, current_version, args)
+        if not args.suppress_subdir:
+            copy_package_path_to_input(override, current_version, args)
 
         if pkginfo_template:
             apply_pkginfo_template(override, pkginfo_template)
